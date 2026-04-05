@@ -1,0 +1,190 @@
+# GitHub Actions CI/CD Workflow - ML System
+# ============================================
+# Kriteria 3 - Advanced
+#
+# Tahapan:
+#   1. Set up job
+#   2. Run actions/checkout@v3
+#   3. Set up Python 3.12.7
+#   4. Check Env
+#   5. Install dependencies
+#   6. Run mlflow project
+#   7. Get latest MLflow run_id
+#   8. Install Python dependencies
+#   9. Upload to GitHub (artifacts)
+#  10. Build Docker Model
+#  11. Log in to Docker Hub
+#  12. Tag Docker Image
+#  13. Push Docker Image
+#  14. Complete job
+
+name: ML CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: "3.12.7"
+  MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
+  DOCKER_IMAGE_NAME: "credit-scoring-model"
+
+jobs:
+  ml-pipeline:
+    runs-on: ubuntu-latest
+
+    steps:
+      # ============================
+      # 1. Checkout repository
+      # ============================
+      - name: Run actions/checkout@v3
+        uses: actions/checkout@v3
+
+      # ============================
+      # 2. Setup Python
+      # ============================
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      # ============================
+      # 3. Check Environment
+      # ============================
+      - name: Check Env
+        run: |
+          echo "Python version:"
+          python --version
+          echo "Pip version:"
+          pip --version
+          echo "Working directory:"
+          pwd
+          echo "Files in directory:"
+          ls -la
+          echo "MLProject folder:"
+          ls -la MLProject/
+
+      # ============================
+      # 4. Install Dependencies
+      # ============================
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas numpy scikit-learn mlflow==2.19.0 matplotlib seaborn joblib
+
+      # ============================
+      # 5. Set MLflow Tracking URI
+      # ============================
+      - name: Set MLflow Tracking URI
+        run: |
+          echo "Setting MLflow Tracking URI..."
+          export MLFLOW_TRACKING_URI=${{ secrets.MLFLOW_TRACKING_URI }}
+          echo "MLFLOW_TRACKING_URI is set"
+
+      # ============================
+      # 6. Run MLflow Project
+      # ============================
+      - name: Run mlflow project
+        run: |
+          echo "Running ML training pipeline..."
+          cd MLProject
+          python modelling.py
+        env:
+          MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
+
+      # ============================
+      # 7. Get Latest MLflow Run ID
+      # ============================
+      - name: Get latest MLflow run_id
+        run: |
+          echo "Getting latest MLflow run ID..."
+          python -c "
+          import mlflow
+          import os
+          mlflow.set_tracking_uri(os.environ.get('MLFLOW_TRACKING_URI', 'http://127.0.0.1:5000'))
+          client = mlflow.tracking.MlflowClient()
+          experiment = client.get_experiment_by_name('Credit Scoring')
+          if experiment:
+              runs = client.search_runs(experiment.experiment_id, order_by=['start_time DESC'], max_results=1)
+              if runs:
+                  print(f'Latest Run ID: {runs[0].info.run_id}')
+                  print(f'Metrics: {runs[0].data.metrics}')
+              else:
+                  print('No runs found')
+          else:
+              print('Experiment not found')
+          "
+        env:
+          MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
+
+      # ============================
+      # 8. Install Python Dependencies
+      # ============================
+      - name: Install Python dependencies
+        run: |
+          pip install mlflow==2.19.0
+
+      # ============================
+      # 9. Upload Artifacts to GitHub
+      # ============================
+      - name: Upload to GitHub
+        uses: actions/upload-artifact@v3
+        with:
+          name: ml-model-artifacts
+          path: |
+            MLProject/credit_risk_preprocessing/
+            MLProject/*.pkl
+            MLProject/*.json
+            MLProject/*.png
+          retention-days: 30
+
+      # ============================
+      # 10. Build Docker Image
+      # ============================
+      - name: Build Docker Model
+        run: |
+          echo "Building Docker image..."
+          cd MLProject
+          cat > Dockerfile << 'EOF'
+          FROM python:3.12.7-slim
+          WORKDIR /app
+          RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
+          RUN pip install mlflow==2.19.0 scikit-learn==1.5.2 pandas numpy joblib
+          COPY model.pkl .
+          COPY modelling.py .
+          EXPOSE 5002
+          CMD ["python", "-c", "import mlflow; mlflow.models.serve(model_uri='model.pkl', port=5002, host='0.0.0.0')"]
+          EOF
+          docker build -t ${{ env.DOCKER_IMAGE_NAME }}:latest .
+          docker images | grep ${{ env.DOCKER_IMAGE_NAME }}
+
+      # ============================
+      # 11. Login to Docker Hub
+      # ============================
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      # ============================
+      # 12. Tag Docker Image
+      # ============================
+      - name: Tag Docker Image
+        run: |
+          docker tag ${{ env.DOCKER_IMAGE_NAME }}:latest \
+            ${{ secrets.DOCKER_USERNAME }}/${{ env.DOCKER_IMAGE_NAME }}:latest
+          docker tag ${{ env.DOCKER_IMAGE_NAME }}:latest \
+            ${{ secrets.DOCKER_USERNAME }}/${{ env.DOCKER_IMAGE_NAME }}:${{ github.sha }}
+
+      # ============================
+      # 13. Push Docker Image
+      # ============================
+      - name: Push Docker Image
+        run: |
+          docker push ${{ secrets.DOCKER_USERNAME }}/${{ env.DOCKER_IMAGE_NAME }}:latest
+          docker push ${{ secrets.DOCKER_USERNAME }}/${{ env.DOCKER_IMAGE_NAME }}:${{ github.sha }}
+          echo "Docker image pushed successfully!"
