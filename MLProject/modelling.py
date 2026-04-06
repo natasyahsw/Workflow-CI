@@ -34,13 +34,13 @@ EXPERIMENT_NAME = "Credit Scoring"
 RANDOM_STATE = 42
 
 # ===================================================================
-# SETUP
+# SETUP - Gunakan local file store di CI (tanpa server)
 # ===================================================================
-mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+# Tidak menggunakan set_tracking_uri agar MLflow menyimpan ke ./mlruns
 mlflow.set_experiment(EXPERIMENT_NAME)
 
-print(f"[CI] MLflow Tracking URI: {MLFLOW_TRACKING_URI}")
 print(f"[CI] Experiment: {EXPERIMENT_NAME}")
+print(f"[CI] Tracking: local file store (./mlruns)")
 
 
 def load_and_preprocess():
@@ -145,7 +145,7 @@ def train():
         }
         mlflow.log_metrics(metrics)
 
-        mlflow.sklearn.log_model(model, "model", registered_model_name="credit-scoring")
+        mlflow.sklearn.log_model(model, "model")
 
         # Log confusion matrix artifact
         cm = confusion_matrix(y_test, y_pred)
