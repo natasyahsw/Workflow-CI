@@ -101,7 +101,7 @@ jobs:
       - name: Get latest MLflow run_id
         run: |
           echo "Getting latest MLflow run ID..."
-          python -c "
+          python -c "import textwrap; code = '''
           import mlflow
           import os
           mlflow.set_tracking_uri(os.environ.get('MLFLOW_TRACKING_URI', 'http://127.0.0.1:5000'))
@@ -116,7 +116,7 @@ jobs:
                   print('No runs found')
           else:
               print('Experiment not found')
-          "
+          '''; exec(textwrap.dedent(code))"
         env:
           MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
 
@@ -148,16 +148,14 @@ jobs:
         run: |
           echo "Building Docker image..."
           cd MLProject
-          cat > Dockerfile << 'EOF'
-          FROM python:3.12.7-slim
-          WORKDIR /app
-          RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
-          RUN pip install mlflow==2.19.0 scikit-learn==1.5.2 pandas numpy joblib
-          COPY model.pkl .
-          COPY modelling.py .
-          EXPOSE 5002
-          CMD ["python", "-c", "import mlflow; mlflow.models.serve(model_uri='model.pkl', port=5002, host='0.0.0.0')"]
-          EOF
+          echo "FROM python:3.12.7-slim" > Dockerfile
+          echo "WORKDIR /app" >> Dockerfile
+          echo "RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*" >> Dockerfile
+          echo "RUN pip install mlflow==2.19.0 scikit-learn==1.5.2 pandas numpy joblib" >> Dockerfile
+          echo "COPY model.pkl ." >> Dockerfile
+          echo "COPY modelling.py ." >> Dockerfile
+          echo "EXPOSE 5002" >> Dockerfile
+          echo "CMD [\"python\", \"-c\", \"import mlflow; mlflow.models.serve(model_uri='model.pkl', port=5002, host='0.0.0.0')\"]" >> Dockerfile
           docker build -t ${{ env.DOCKER_IMAGE_NAME }}:latest .
           docker images | grep ${{ env.DOCKER_IMAGE_NAME }}
 
