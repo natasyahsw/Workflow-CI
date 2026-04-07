@@ -1,16 +1,15 @@
 # GitHub Actions CI/CD Workflow - ML System
 # ============================================
-# Kriteria 3 - Skilled
+# Kriteria 3 - Skilled/Advanced
 #
 # Tahapan:
-#   1. Set up job
-#   2. Run actions/checkout@v3
-#   3. Set up Python 3.12.7
-#   4. Check Env
-#   5. Install dependencies
-#   6. Run mlflow project
-#   7. Get latest MLflow run_id
-#   8. Upload to GitHub (artifacts)
+#   1. Checkout repository
+#   2. Set up Python 3.12.7
+#   3. Check Environment
+#   4. Install dependencies
+#   5. Run MLflow Project (mlflow run)
+#   6. Get latest MLflow run_id
+#   7. Upload to GitHub (artifacts)
 
 name: ML CI/CD Pipeline
 
@@ -32,14 +31,14 @@ jobs:
       # ============================
       # 1. Checkout repository
       # ============================
-      - name: Run actions/checkout@v3
-        uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
       # ============================
       # 2. Setup Python
       # ============================
       - name: Set up Python ${{ env.PYTHON_VERSION }}
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -70,11 +69,10 @@ jobs:
       # ============================
       # 5. Run MLflow Project
       # ============================
-      - name: Run mlflow project
+      - name: Run MLflow Project
         run: |
           echo "Running ML training via MLflow Project..."
-          cd MLProject
-          python modelling.py
+          mlflow run MLProject --env-manager=local --no-conda
 
       # ============================
       # 6. Get latest MLflow run_id
@@ -102,7 +100,7 @@ jobs:
       # 7. Upload Artifacts to GitHub
       # ============================
       - name: Upload Artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ml-model-artifacts
           path: |
