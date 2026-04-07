@@ -72,7 +72,7 @@ jobs:
       - name: Run MLflow Project
         run: |
           echo "Running ML training via MLflow Project..."
-          mlflow run MLProject --env-manager=local --no-conda
+          mlflow run MLProject --env-manager=local
 
       # ============================
       # 6. Get latest MLflow run_id
